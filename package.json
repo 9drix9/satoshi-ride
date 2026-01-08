@@ -7,7 +7,8 @@
     "genkeys": "node src/genkeys.js",
     "request": "tsx src/request.ts",
     "driver": "tsx src/driver.ts",
-    "bids": "tsx src/bid_listener.ts"
+    "bids": "tsx src/bid_listener.ts",
+    "invoice": "tsx src/request_invoice.ts"
   },
   "keywords": [],
   "author": "",

@@ -84,6 +84,20 @@ async function main() {
       }
     }
   );
+  
+  relay.subscribe(
+  [{ kinds: [30078], "#d": ["invoice_request"] }],
+  {
+    onevent: async (ev) => {
+      const req = JSON.parse(ev.content);
+
+      console.log("⚡ Invoice requested:", req);
+
+      // NEXT: generate LN invoice here
+    }
+  }
+);
+
 
   console.log("Listening for ride requests… Ctrl+C to stop");
   process.on("SIGINT", () => {
@@ -97,3 +111,4 @@ main().catch((e) => {
   console.error(e);
   process.exit(1);
 });
+
