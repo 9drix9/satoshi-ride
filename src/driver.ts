@@ -1,0 +1,99 @@
+import { finalizeEvent, verifyEvent } from "nostr-tools";
+import { Relay } from "nostr-tools/relay";
+
+const RELAY = "wss://relay.damus.io";
+
+const SK_HEX = process.env.NOSTR_SK_HEX!;
+if (!SK_HEX) throw new Error("Set NOSTR_SK_HEX");
+const sk = Uint8Array.from(Buffer.from(SK_HEX, "hex"));
+
+function computeBidSats(params: {
+  miles: number;
+  minutes: number;
+  base_fee: number;
+  per_mile: number;
+  per_minute: number;
+  surge_pct: number;
+  risk_buffer: number;
+}) {
+  const raw =
+    params.base_fee +
+    params.miles * params.per_mile +
+    params.minutes * params.per_minute +
+    params.risk_buffer;
+
+  return Math.round(raw * (1 + params.surge_pct / 100));
+}
+
+async function main() {
+  const relay = await Relay.connect(RELAY);
+  console.log("🚕 Driver connected:", RELAY);
+
+  const sub = relay.subscribe(
+    [{ kinds: [30078], "#d": ["ride_request"] }],
+    {
+      onevent: async (ev) => {
+        try {
+          const req = JSON.parse(ev.content);
+
+          // MVP: pretend we estimated distance/time locally
+          const miles = 4.2;
+          const minutes = 13;
+
+          const total_sats = computeBidSats({
+            miles,
+            minutes,
+            base_fee: 1500,
+            per_mile: 1200,
+            per_minute: 80,
+            surge_pct: 10,
+            risk_buffer: 500
+          });
+
+          const deposit_sats = Math.min(2000, Math.round(total_sats * 0.15));
+
+          const bid = {
+            request_id: req.id,
+            bid_id: crypto.randomUUID(),
+            total_sats,
+            deposit_sats,
+            eta_mins: 6,
+            payment_modes_supported: ["LN", "ONCHAIN"]
+          };
+
+          const bidTemplate = {
+            kind: 30078,
+            created_at: Math.floor(Date.now() / 1000),
+            tags: [
+              ["d", "ride_bid"],
+              ["v", "1"],
+              ["e", ev.id],     // reference request event id
+              ["p", ev.pubkey]  // target rider pubkey
+            ],
+            content: JSON.stringify(bid)
+          };
+
+          const bidEvent = finalizeEvent(bidTemplate, sk);
+          if (!verifyEvent(bidEvent)) throw new Error("Bad bid event");
+
+          await relay.publish(bidEvent);
+          console.log("✅ Sent bid:", bid);
+        } catch (err) {
+          console.log("⚠️ Couldn’t parse request:", String(err));
+        }
+      }
+    }
+  );
+
+  console.log("Listening for ride requests… Ctrl+C to stop");
+  process.on("SIGINT", () => {
+    sub.close();
+    relay.close();
+    process.exit(0);
+  });
+}
+
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});
