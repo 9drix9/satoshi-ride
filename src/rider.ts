@@ -253,7 +253,7 @@ async function main() {
             return;
           }
           if (invoice.payment_mode === "ONCHAIN") {
-            await handleOnchainInvoice(invoice);
+            console.log("🧾 On-chain address received:", invoice.onchain_address);
             return;
           }
           console.log("🧾 Invoice received:", invoice.invoice);
