@@ -172,7 +172,7 @@ async function main() {
       }
     ],
     {
-      onevent: (ev) => {
+      onevent: async (ev) => {
         try {
           if (!verifyEvent(ev)) {
             console.log("⚠️ Invalid bid event signature:", ev.id);
@@ -207,7 +207,7 @@ async function main() {
       }
     ],
     {
-      onevent: (ev) => {
+      onevent: async (ev) => {
         try {
           if (!verifyEvent(ev)) {
             console.log("⚠️ Invalid invoice response event signature:", ev.id);
