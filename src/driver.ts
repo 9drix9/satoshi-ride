@@ -2,6 +2,7 @@ import { finalizeEvent, getPublicKey, verifyEvent } from "nostr-tools";
 import { Relay } from "nostr-tools/relay";
 import { schnorr } from "@noble/curves/secp256k1";
 import { sha256 } from "@noble/hashes/sha256";
+import { EVENT_KIND, PRIMARY_RELAY, tagD, tagE, tagP, tagV } from "./config";
 import {
   hasVersionTag,
   isInvoiceRequestPayload,
@@ -10,7 +11,7 @@ import {
   isRideRequestPayload
 } from "./validation";
 
-const RELAY = "wss://relay.damus.io";
+const RELAY = PRIMARY_RELAY;
 
 const SK_HEX = process.env.NOSTR_SK_HEX!;
 if (!SK_HEX) throw new Error("Set NOSTR_SK_HEX");
@@ -77,14 +78,14 @@ async function main() {
     };
 
     const statusTemplate = {
-      kind: 30078,
+      kind: EVENT_KIND,
       created_at: Math.floor(Date.now() / 1000),
       tags: [
-        ["d", "ride_status"],
-        ["v", "1"],
-        ["e", params.bid_event_id],
-        ["p", params.rider_pubkey],
-        ["p", driverPubkey]
+        tagD("ride_status"),
+        tagV(),
+        tagE(params.bid_event_id),
+        tagP(params.rider_pubkey),
+        tagP(driverPubkey)
       ],
       content: JSON.stringify(payload)
     };
@@ -97,7 +98,7 @@ async function main() {
   }
 
   const sub = relay.subscribe(
-    [{ kinds: [30078], "#d": ["ride_request"] }],
+    [{ kinds: [EVENT_KIND], "#d": ["ride_request"] }],
     {
       onevent: async (ev) => {
         try {
@@ -141,13 +142,13 @@ async function main() {
           };
 
           const bidTemplate = {
-            kind: 30078,
+            kind: EVENT_KIND,
             created_at: Math.floor(Date.now() / 1000),
             tags: [
-              ["d", "ride_bid"],
-              ["v", "1"],
-              ["e", ev.id],     // reference request event id
-              ["p", ev.pubkey]  // target rider pubkey
+              tagD("ride_bid"),
+              tagV(),
+              tagE(ev.id), // reference request event id
+              tagP(ev.pubkey) // target rider pubkey
             ],
             content: JSON.stringify(bid)
           };
@@ -171,7 +172,7 @@ async function main() {
   );
   
   relay.subscribe(
-    [{ kinds: [30078], "#d": ["invoice_request"] }],
+    [{ kinds: [EVENT_KIND], "#d": ["invoice_request"] }],
     {
       onevent: async (ev) => {
         try {
@@ -217,13 +218,13 @@ async function main() {
           };
 
           const invoiceTemplate = {
-            kind: 30078,
+            kind: EVENT_KIND,
             created_at: Math.floor(Date.now() / 1000),
             tags: [
-              ["d", "invoice_response"],
-              ["v", "1"],
-              ["e", ev.id],
-              ["p", ev.pubkey]
+              tagD("invoice_response"),
+              tagV(),
+              tagE(ev.id),
+              tagP(ev.pubkey)
             ],
             content: JSON.stringify(invoiceResponse)
           };
@@ -241,7 +242,7 @@ async function main() {
   );
 
   relay.subscribe(
-    [{ kinds: [30078], "#d": ["ride_accept"] }],
+    [{ kinds: [EVENT_KIND], "#d": ["ride_accept"] }],
     {
       onevent: async (ev) => {
         if (!verifyEvent(ev)) {
@@ -322,7 +323,7 @@ async function main() {
   relay.subscribe(
     [
       {
-        kinds: [30078],
+        kinds: [EVENT_KIND],
         "#d": ["ride_receipt"],
         "#p": [driverPubkey]
       }

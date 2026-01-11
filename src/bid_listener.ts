@@ -3,6 +3,7 @@ import { Relay } from "nostr-tools/relay";
 import { schnorr } from "@noble/curves/secp256k1";
 import { sha256 } from "@noble/hashes/sha256";
 import { bytesToHex } from "@noble/hashes/utils";
+import { EVENT_KIND, PRIMARY_RELAY, tagD, tagE, tagP, tagV } from "./config";
 import {
   hasVersionTag,
   isInvoiceResponsePayload,
@@ -10,7 +11,7 @@ import {
   isRideStatusPayload
 } from "./validation";
 
-const RELAY = "wss://relay.damus.io";
+const RELAY = PRIMARY_RELAY;
 
 const SK_HEX = process.env.NOSTR_SK_HEX!;
 if (!SK_HEX) throw new Error("Set NOSTR_SK_HEX");
@@ -26,7 +27,7 @@ async function main() {
   relay.subscribe(
     [
       {
-        kinds: [30078],
+        kinds: [EVENT_KIND],
         "#d": ["ride_bid"],
         "#p": [RIDER_PUBKEY]
       }
@@ -59,7 +60,7 @@ async function main() {
   relay.subscribe(
     [
       {
-        kinds: [30078],
+        kinds: [EVENT_KIND],
         "#d": ["invoice_response"],
         "#p": [RIDER_PUBKEY]
       }
@@ -91,7 +92,7 @@ async function main() {
   relay.subscribe(
     [
       {
-        kinds: [30078],
+        kinds: [EVENT_KIND],
         "#d": ["ride_status"],
         "#p": [RIDER_PUBKEY]
       }
@@ -142,14 +143,14 @@ async function main() {
             const receipt = { ...receiptBase, signature };
 
             const receiptTemplate = {
-              kind: 30078,
+              kind: EVENT_KIND,
               created_at: timestamp,
               tags: [
-                ["d", "ride_receipt"],
-                ["v", "1"],
-                ["e", ev.id],
-                ["p", bidTotalsEntry.driver_pubkey],
-                ["p", RIDER_PUBKEY]
+                tagD("ride_receipt"),
+                tagV(),
+                tagE(ev.id),
+                tagP(bidTotalsEntry.driver_pubkey),
+                tagP(RIDER_PUBKEY)
               ],
               content: JSON.stringify(receipt)
             };
