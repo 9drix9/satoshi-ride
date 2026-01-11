@@ -1,4 +1,6 @@
+import { verifyEvent } from "nostr-tools";
 import { Relay } from "nostr-tools/relay";
+import { isRideBidPayload } from "./validation";
 
 const RELAY = "wss://relay.damus.io";
 
@@ -21,7 +23,15 @@ async function main() {
     {
       onevent: (ev) => {
         try {
+          if (!verifyEvent(ev)) {
+            console.log("⚠️ Invalid bid event signature:", ev.id);
+            return;
+          }
           const bid = JSON.parse(ev.content);
+          if (!isRideBidPayload(bid)) {
+            console.log("⚠️ Invalid bid payload:", bid);
+            return;
+          }
           console.log("💰 Received bid:", bid);
         } catch {
           console.log("⚠️ Bad bid event");

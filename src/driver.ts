@@ -1,5 +1,6 @@
 import { finalizeEvent, getPublicKey, verifyEvent } from "nostr-tools";
 import { Relay } from "nostr-tools/relay";
+import { isInvoiceRequestPayload, isRideRequestPayload } from "./validation";
 
 const RELAY = "wss://relay.damus.io";
 
@@ -48,7 +49,15 @@ async function main() {
     {
       onevent: async (ev) => {
         try {
+          if (!verifyEvent(ev)) {
+            console.log("⚠️ Invalid ride request event signature:", ev.id);
+            return;
+          }
           const req = JSON.parse(ev.content);
+          if (!isRideRequestPayload(req)) {
+            console.log("⚠️ Invalid ride request payload:", req);
+            return;
+          }
 
           // MVP: pretend we estimated distance/time locally
           const miles = 4.2;
@@ -104,41 +113,53 @@ async function main() {
     [{ kinds: [30078], "#d": ["invoice_request"] }],
     {
       onevent: async (ev) => {
-        const req = JSON.parse(ev.content);
+        try {
+          if (!verifyEvent(ev)) {
+            console.log("⚠️ Invalid invoice request event signature:", ev.id);
+            return;
+          }
+          const req = JSON.parse(ev.content);
+          if (!isInvoiceRequestPayload(req)) {
+            console.log("⚠️ Invalid invoice request payload:", req);
+            return;
+          }
 
-        console.log("⚡ Invoice requested:", req);
+          console.log("⚡ Invoice requested:", req);
 
-        const invoice = generateTestInvoice({
-          amount_sats: req.amount_sats,
-          request_id: req.request_id,
-          bid_id: req.bid_id
-        });
+          const invoice = generateTestInvoice({
+            amount_sats: req.amount_sats,
+            request_id: req.request_id,
+            bid_id: req.bid_id
+          });
 
-        const invoiceResponse = {
-          request_id: req.request_id,
-          bid_id: req.bid_id,
-          amount_sats: req.amount_sats,
-          payment_mode: req.payment_mode,
-          invoice
-        };
+          const invoiceResponse = {
+            request_id: req.request_id,
+            bid_id: req.bid_id,
+            amount_sats: req.amount_sats,
+            payment_mode: req.payment_mode,
+            invoice
+          };
 
-        const invoiceTemplate = {
-          kind: 30078,
-          created_at: Math.floor(Date.now() / 1000),
-          tags: [
-            ["d", "invoice_response"],
-            ["v", "1"],
-            ["e", ev.id],
-            ["p", ev.pubkey]
-          ],
-          content: JSON.stringify(invoiceResponse)
-        };
+          const invoiceTemplate = {
+            kind: 30078,
+            created_at: Math.floor(Date.now() / 1000),
+            tags: [
+              ["d", "invoice_response"],
+              ["v", "1"],
+              ["e", ev.id],
+              ["p", ev.pubkey]
+            ],
+            content: JSON.stringify(invoiceResponse)
+          };
 
-        const invoiceEvent = finalizeEvent(invoiceTemplate, sk);
-        if (!verifyEvent(invoiceEvent)) throw new Error("Bad invoice event");
+          const invoiceEvent = finalizeEvent(invoiceTemplate, sk);
+          if (!verifyEvent(invoiceEvent)) throw new Error("Bad invoice event");
 
-        await relay.publish(invoiceEvent);
-        console.log("🧾 Sent invoice:", invoiceResponse);
+          await relay.publish(invoiceEvent);
+          console.log("🧾 Sent invoice:", invoiceResponse);
+        } catch (err) {
+          console.log("⚠️ Couldn’t parse invoice request:", String(err));
+        }
       }
     }
   );
