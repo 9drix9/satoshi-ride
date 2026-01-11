@@ -1,7 +1,8 @@
 import { finalizeEvent } from "nostr-tools";
 import { Relay } from "nostr-tools/relay";
+import { EVENT_KIND, PRIMARY_RELAY, tagD, tagE, tagP, tagV } from "./config";
 
-const RELAY = "wss://relay.damus.io";
+const RELAY = PRIMARY_RELAY;
 
 const SK_HEX = process.env.NOSTR_SK_HEX!;
 if (!SK_HEX) throw new Error("Set NOSTR_SK_HEX");
@@ -22,13 +23,13 @@ const invoiceRequest = {
 
 const event = finalizeEvent(
   {
-    kind: 30078,
+    kind: EVENT_KIND,
     created_at: Math.floor(Date.now() / 1000),
     tags: [
-      ["d", "invoice_request"],
-      ["v", "1"],
-      ["e", BID_EVENT_ID],
-      ["p", DRIVER_PUBKEY]
+      tagD("invoice_request"),
+      tagV(),
+      tagE(BID_EVENT_ID),
+      tagP(DRIVER_PUBKEY)
     ],
     content: JSON.stringify(invoiceRequest)
   },

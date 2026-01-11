@@ -1,7 +1,8 @@
 import { finalizeEvent, getPublicKey } from "nostr-tools";
 import { Relay } from "nostr-tools/relay";
+import { EVENT_KIND, PRIMARY_RELAY, tagD, tagE, tagP, tagV } from "./config";
 
-const RELAY = "wss://relay.damus.io";
+const RELAY = PRIMARY_RELAY;
 
 const SK_HEX = process.env.NOSTR_SK_HEX!;
 if (!SK_HEX) throw new Error("Set NOSTR_SK_HEX");
@@ -19,13 +20,13 @@ const rideAccept = {
 
 const event = finalizeEvent(
   {
-    kind: 30078,
+    kind: EVENT_KIND,
     created_at: Math.floor(Date.now() / 1000),
     tags: [
-      ["d", "ride_accept"],
-      ["v", "1"],
-      ["e", BID_EVENT_ID],
-      ["p", rideAccept.driver_pubkey]
+      tagD("ride_accept"),
+      tagV(),
+      tagE(BID_EVENT_ID),
+      tagP(rideAccept.driver_pubkey)
     ],
     content: JSON.stringify(rideAccept)
   },

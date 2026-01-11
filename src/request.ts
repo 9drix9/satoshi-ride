@@ -1,11 +1,6 @@
 import { finalizeEvent, verifyEvent } from "nostr-tools";
 import { Relay } from "nostr-tools/relay";
-
-const RELAYS = [
-  "wss://relay.damus.io",
-  "wss://relay.primal.net",
-  "wss://nos.lol"
-];
+import { EVENT_KIND, RELAYS, tagD, tagV } from "./config";
 
 // Rider secret key (we’ll pass this via env var)
 const SK_HEX = process.env.NOSTR_SK_HEX!;
@@ -25,12 +20,9 @@ const rideRequest = {
 };
 
 const eventTemplate = {
-  kind: 30078,
+  kind: EVENT_KIND,
   created_at: Math.floor(Date.now() / 1000),
-  tags: [
-    ["d", "ride_request"],
-    ["v", "1"]
-  ],
+  tags: [tagD("ride_request"), tagV()],
   content: JSON.stringify(rideRequest)
 };
 
