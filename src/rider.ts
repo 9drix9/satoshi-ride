@@ -41,6 +41,36 @@ const rideRequest = {
 
 const bidTotals = new Map<string, { total_sats: number; driver_pubkey: string }>();
 
+async function handleOnchainInvoice(invoice: {
+  onchain_address?: string;
+  amount_sats: number;
+}) {
+  console.log("🧾 On-chain address received:", invoice.onchain_address);
+  if (ONCHAIN_AUTOPAY && invoice.onchain_address) {
+    try {
+      const txid = await sendOnchainPayment({
+        address: invoice.onchain_address,
+        amount_sats: invoice.amount_sats
+      });
+      console.log("✅ On-chain payment sent:", txid);
+      const confirmations = await waitForConfirmations({
+        txid,
+        minConfirmations: ONCHAIN_MIN_CONFIRMATIONS,
+        timeoutMs: ONCHAIN_CONFIRM_TIMEOUT_MS,
+        pollIntervalMs: ONCHAIN_CONFIRM_POLL_MS
+      });
+      console.log("✅ On-chain payment confirmed:", {
+        txid,
+        confirmations
+      });
+    } catch (error) {
+      console.log("❌ Failed to send on-chain payment:", String(error));
+    }
+  } else if (!ONCHAIN_AUTOPAY) {
+    console.log("ℹ️ Set BTC_ONCHAIN_AUTOPAY=true to pay via Bitcoin Core RPC.");
+  }
+}
+
 async function publishToRelays(event: ReturnType<typeof finalizeEvent>) {
   await Promise.all(
     RELAYS.map(async (url) => {
@@ -223,32 +253,7 @@ async function main() {
             return;
           }
           if (invoice.payment_mode === "ONCHAIN") {
-            console.log("🧾 On-chain address received:", invoice.onchain_address);
-            if (ONCHAIN_AUTOPAY && invoice.onchain_address) {
-              try {
-                const txid = await sendOnchainPayment({
-                  address: invoice.onchain_address,
-                  amount_sats: invoice.amount_sats
-                });
-                console.log("✅ On-chain payment sent:", txid);
-                const confirmations = await waitForConfirmations({
-                  txid,
-                  minConfirmations: ONCHAIN_MIN_CONFIRMATIONS,
-                  timeoutMs: ONCHAIN_CONFIRM_TIMEOUT_MS,
-                  pollIntervalMs: ONCHAIN_CONFIRM_POLL_MS
-                });
-                console.log("✅ On-chain payment confirmed:", {
-                  txid,
-                  confirmations
-                });
-              } catch (error) {
-                console.log("❌ Failed to send on-chain payment:", String(error));
-              }
-            } else if (!ONCHAIN_AUTOPAY) {
-              console.log(
-                "ℹ️ Set BTC_ONCHAIN_AUTOPAY=true to pay via Bitcoin Core RPC."
-              );
-            }
+            await handleOnchainInvoice(invoice);
             return;
           }
           console.log("🧾 Invoice received:", invoice.invoice);
