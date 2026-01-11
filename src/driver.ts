@@ -1,4 +1,4 @@
-import { finalizeEvent, verifyEvent } from "nostr-tools";
+import { finalizeEvent, getPublicKey, verifyEvent } from "nostr-tools";
 import { Relay } from "nostr-tools/relay";
 
 const RELAY = "wss://relay.damus.io";
@@ -6,6 +6,9 @@ const RELAY = "wss://relay.damus.io";
 const SK_HEX = process.env.NOSTR_SK_HEX!;
 if (!SK_HEX) throw new Error("Set NOSTR_SK_HEX");
 const sk = Uint8Array.from(Buffer.from(SK_HEX, "hex"));
+const driverPubkey = getPublicKey(sk);
+const bids = new Map<string, { request_id: string; event_id: string }>();
+const acceptedBids = new Set<string>();
 
 function computeBidSats(params: {
   miles: number;
@@ -77,6 +80,7 @@ async function main() {
           if (!verifyEvent(bidEvent)) throw new Error("Bad bid event");
 
           await relay.publish(bidEvent);
+          bids.set(bid.bid_id, { request_id: req.id, event_id: bidEvent.id });
           console.log("✅ Sent bid:", bid);
         } catch (err) {
           console.log("⚠️ Couldn’t parse request:", String(err));
@@ -98,6 +102,38 @@ async function main() {
   }
 );
 
+  relay.subscribe(
+    [{ kinds: [30078], "#d": ["ride_accept"] }],
+    {
+      onevent: async (ev) => {
+        const accept = JSON.parse(ev.content);
+        const bidRecord = bids.get(accept.bid_id);
+
+        if (!bidRecord) {
+          console.log("🚫 Acceptance for unknown bid:", accept.bid_id);
+          return;
+        }
+
+        if (accept.driver_pubkey !== driverPubkey) {
+          console.log("🚫 Acceptance not intended for this driver:", accept.driver_pubkey);
+          return;
+        }
+
+        const bidEventTag = ev.tags.find((tag) => tag[0] === "e")?.[1];
+        if (bidEventTag && bidEventTag !== bidRecord.event_id) {
+          console.log("🚫 Acceptance references different bid event:", bidEventTag);
+          return;
+        }
+
+        acceptedBids.add(accept.bid_id);
+        console.log("✅ Bid accepted, driver state: accepted", {
+          bid_id: accept.bid_id,
+          request_id: bidRecord.request_id
+        });
+      }
+    }
+  );
+
 
   console.log("Listening for ride requests… Ctrl+C to stop");
   process.on("SIGINT", () => {
@@ -111,4 +147,3 @@ main().catch((e) => {
   console.error(e);
   process.exit(1);
 });
-
