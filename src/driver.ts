@@ -1,6 +1,11 @@
 import { finalizeEvent, getPublicKey, verifyEvent } from "nostr-tools";
 import { Relay } from "nostr-tools/relay";
-import { isInvoiceRequestPayload, isRideRequestPayload } from "./validation";
+import {
+  hasVersionTag,
+  isInvoiceRequestPayload,
+  isRideAcceptPayload,
+  isRideRequestPayload
+} from "./validation";
 
 const RELAY = "wss://relay.damus.io";
 
@@ -92,6 +97,10 @@ async function main() {
             console.log("⚠️ Invalid ride request event signature:", ev.id);
             return;
           }
+          if (!hasVersionTag(ev.tags)) {
+            console.log("⚠️ Unsupported ride request version:", ev.id);
+            return;
+          }
           const req = JSON.parse(ev.content);
           if (!isRideRequestPayload(req)) {
             console.log("⚠️ Invalid ride request payload:", req);
@@ -162,6 +171,10 @@ async function main() {
             console.log("⚠️ Invalid invoice request event signature:", ev.id);
             return;
           }
+          if (!hasVersionTag(ev.tags)) {
+            console.log("⚠️ Unsupported invoice request version:", ev.id);
+            return;
+          }
           const req = JSON.parse(ev.content);
           if (!isInvoiceRequestPayload(req)) {
             console.log("⚠️ Invalid invoice request payload:", req);
@@ -212,7 +225,20 @@ async function main() {
     [{ kinds: [30078], "#d": ["ride_accept"] }],
     {
       onevent: async (ev) => {
+        if (!verifyEvent(ev)) {
+          console.log("⚠️ Invalid ride accept event signature:", ev.id);
+          return;
+        }
+        if (!hasVersionTag(ev.tags)) {
+          console.log("⚠️ Unsupported ride accept version:", ev.id);
+          return;
+        }
+
         const accept = JSON.parse(ev.content);
+        if (!isRideAcceptPayload(accept)) {
+          console.log("⚠️ Invalid ride accept payload:", accept);
+          return;
+        }
         const bidRecord = bids.get(accept.bid_id);
 
         if (!bidRecord) {

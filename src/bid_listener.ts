@@ -3,7 +3,12 @@ import { Relay } from "nostr-tools/relay";
 import { schnorr } from "@noble/curves/secp256k1";
 import { sha256 } from "@noble/hashes/sha256";
 import { bytesToHex } from "@noble/hashes/utils";
-import { isRideBidPayload, isRideStatusPayload } from "./validation";
+import {
+  hasVersionTag,
+  isInvoiceResponsePayload,
+  isRideBidPayload,
+  isRideStatusPayload
+} from "./validation";
 
 const RELAY = "wss://relay.damus.io";
 
@@ -33,6 +38,10 @@ async function main() {
             console.log("⚠️ Invalid bid event signature:", ev.id);
             return;
           }
+          if (!hasVersionTag(ev.tags)) {
+            console.log("⚠️ Unsupported bid version:", ev.id);
+            return;
+          }
           const bid = JSON.parse(ev.content);
           if (!isRideBidPayload(bid)) {
             console.log("⚠️ Invalid bid payload:", bid);
@@ -58,7 +67,19 @@ async function main() {
     {
       onevent: (ev) => {
         try {
+          if (!verifyEvent(ev)) {
+            console.log("⚠️ Invalid invoice response event signature:", ev.id);
+            return;
+          }
+          if (!hasVersionTag(ev.tags)) {
+            console.log("⚠️ Unsupported invoice response version:", ev.id);
+            return;
+          }
           const invoice = JSON.parse(ev.content);
+          if (!isInvoiceResponsePayload(invoice)) {
+            console.log("⚠️ Invalid invoice response payload:", invoice);
+            return;
+          }
           console.log("🧾 Invoice received:", invoice);
         } catch {
           console.log("⚠️ Bad invoice event");
@@ -80,6 +101,10 @@ async function main() {
         try {
           if (!verifyEvent(ev)) {
             console.log("⚠️ Invalid status event signature:", ev.id);
+            return;
+          }
+          if (!hasVersionTag(ev.tags)) {
+            console.log("⚠️ Unsupported ride status version:", ev.id);
             return;
           }
           const status = JSON.parse(ev.content);
