@@ -1,9 +1,12 @@
 import { finalizeEvent, getPublicKey, verifyEvent } from "nostr-tools";
 import { Relay } from "nostr-tools/relay";
+import { schnorr } from "@noble/curves/secp256k1";
+import { sha256 } from "@noble/hashes/sha256";
 import {
   hasVersionTag,
   isInvoiceRequestPayload,
   isRideAcceptPayload,
+  isRideReceiptPayload,
   isRideRequestPayload
 } from "./validation";
 
@@ -18,6 +21,7 @@ const bids = new Map<
   { request_id: string; event_id: string; rider_pubkey: string; total_sats: number }
 >();
 const acceptedBids = new Set<string>();
+const settledBids = new Map<string, { settled_at: number; receipt: unknown }>();
 const activeStatusTimers = new Map<string, NodeJS.Timeout[]>();
 
 function generateTestInvoice(params: {
@@ -300,6 +304,88 @@ async function main() {
     }
   );
 
+  relay.subscribe(
+    [
+      {
+        kinds: [30078],
+        "#d": ["ride_receipt"],
+        "#p": [driverPubkey]
+      }
+    ],
+    {
+      onevent: (ev) => {
+        try {
+          if (!verifyEvent(ev)) {
+            console.log("⚠️ Invalid ride receipt event signature:", ev.id);
+            return;
+          }
+          if (!hasVersionTag(ev.tags)) {
+            console.log("⚠️ Unsupported ride receipt version:", ev.id);
+            return;
+          }
+
+          const receipt = JSON.parse(ev.content);
+          if (!isRideReceiptPayload(receipt)) {
+            console.log("⚠️ Invalid ride receipt payload:", receipt);
+            return;
+          }
+
+          if (receipt.driver_pubkey !== driverPubkey) {
+            console.log("🚫 Receipt not intended for this driver:", receipt.driver_pubkey);
+            return;
+          }
+
+          const bidRecord = bids.get(receipt.bid_id);
+          if (!bidRecord) {
+            console.log("🚫 Receipt for unknown bid:", receipt.bid_id);
+            return;
+          }
+
+          if (bidRecord.total_sats !== receipt.total_sats) {
+            console.log("🚫 Receipt total mismatch:", {
+              bid_id: receipt.bid_id,
+              expected: bidRecord.total_sats,
+              received: receipt.total_sats
+            });
+            return;
+          }
+
+          const receiptBase = {
+            request_id: receipt.request_id,
+            bid_id: receipt.bid_id,
+            total_sats: receipt.total_sats,
+            timestamp: receipt.timestamp,
+            rider_pubkey: receipt.rider_pubkey,
+            driver_pubkey: receipt.driver_pubkey
+          };
+          const receiptPayloadHash = sha256(
+            new TextEncoder().encode(JSON.stringify(receiptBase))
+          );
+          const isValidSignature = schnorr.verify(
+            receipt.signature,
+            receiptPayloadHash,
+            receipt.rider_pubkey
+          );
+
+          if (!isValidSignature) {
+            console.log("⚠️ Invalid receipt signature:", receipt.bid_id);
+            return;
+          }
+
+          settledBids.set(receipt.bid_id, {
+            settled_at: Math.floor(Date.now() / 1000),
+            receipt
+          });
+          console.log("✅ Ride settled:", {
+            bid_id: receipt.bid_id,
+            request_id: receipt.request_id
+          });
+        } catch (error) {
+          console.log("⚠️ Bad ride receipt event:", String(error));
+        }
+      }
+    }
+  );
 
   console.log("Listening for ride requests… Ctrl+C to stop");
   process.on("SIGINT", () => {
