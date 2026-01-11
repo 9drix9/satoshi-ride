@@ -8,8 +8,12 @@ const SK_HEX = process.env.NOSTR_SK_HEX!;
 if (!SK_HEX) throw new Error("Set NOSTR_SK_HEX");
 const sk = Uint8Array.from(Buffer.from(SK_HEX, "hex"));
 const driverPubkey = getPublicKey(sk);
-const bids = new Map<string, { request_id: string; event_id: string }>();
+const bids = new Map<
+  string,
+  { request_id: string; event_id: string; rider_pubkey: string; total_sats: number }
+>();
 const acceptedBids = new Set<string>();
+const activeStatusTimers = new Map<string, NodeJS.Timeout[]>();
 
 function generateTestInvoice(params: {
   amount_sats: number;
@@ -43,6 +47,41 @@ function computeBidSats(params: {
 async function main() {
   const relay = await Relay.connect(RELAY);
   console.log("🚕 Driver connected:", RELAY);
+
+  async function publishRideStatus(params: {
+    status: "en_route" | "arrived" | "completed";
+    request_id: string;
+    bid_id: string;
+    rider_pubkey: string;
+    bid_event_id: string;
+  }) {
+    const payload = {
+      status: params.status,
+      request_id: params.request_id,
+      bid_id: params.bid_id,
+      rider_pubkey: params.rider_pubkey,
+      driver_pubkey: driverPubkey
+    };
+
+    const statusTemplate = {
+      kind: 30078,
+      created_at: Math.floor(Date.now() / 1000),
+      tags: [
+        ["d", "ride_status"],
+        ["v", "1"],
+        ["e", params.bid_event_id],
+        ["p", params.rider_pubkey],
+        ["p", driverPubkey]
+      ],
+      content: JSON.stringify(payload)
+    };
+
+    const statusEvent = finalizeEvent(statusTemplate, sk);
+    if (!verifyEvent(statusEvent)) throw new Error("Bad ride status event");
+
+    await relay.publish(statusEvent);
+    console.log("📍 Status update:", payload);
+  }
 
   const sub = relay.subscribe(
     [{ kinds: [30078], "#d": ["ride_request"] }],
@@ -100,7 +139,12 @@ async function main() {
           if (!verifyEvent(bidEvent)) throw new Error("Bad bid event");
 
           await relay.publish(bidEvent);
-          bids.set(bid.bid_id, { request_id: req.id, event_id: bidEvent.id });
+          bids.set(bid.bid_id, {
+            request_id: req.id,
+            event_id: bidEvent.id,
+            rider_pubkey: ev.pubkey,
+            total_sats
+          });
           console.log("✅ Sent bid:", bid);
         } catch (err) {
           console.log("⚠️ Couldn’t parse request:", String(err));
@@ -192,6 +236,40 @@ async function main() {
           bid_id: accept.bid_id,
           request_id: bidRecord.request_id
         });
+
+        if (!activeStatusTimers.has(accept.bid_id)) {
+          void publishRideStatus({
+            status: "en_route",
+            request_id: bidRecord.request_id,
+            bid_id: accept.bid_id,
+            rider_pubkey: bidRecord.rider_pubkey,
+            bid_event_id: bidRecord.event_id
+          });
+
+          const timers = [
+            setTimeout(() => {
+              void publishRideStatus({
+                status: "arrived",
+                request_id: bidRecord.request_id,
+                bid_id: accept.bid_id,
+                rider_pubkey: bidRecord.rider_pubkey,
+                bid_event_id: bidRecord.event_id
+              });
+            }, 10_000),
+            setTimeout(() => {
+              void publishRideStatus({
+                status: "completed",
+                request_id: bidRecord.request_id,
+                bid_id: accept.bid_id,
+                rider_pubkey: bidRecord.rider_pubkey,
+                bid_event_id: bidRecord.event_id
+              });
+              activeStatusTimers.delete(accept.bid_id);
+            }, 20_000)
+          ];
+
+          activeStatusTimers.set(accept.bid_id, timers);
+        }
       }
     }
   );
@@ -200,6 +278,9 @@ async function main() {
   console.log("Listening for ride requests… Ctrl+C to stop");
   process.on("SIGINT", () => {
     sub.close();
+    for (const timers of activeStatusTimers.values()) {
+      timers.forEach((timer) => clearTimeout(timer));
+    }
     relay.close();
     process.exit(0);
   });
