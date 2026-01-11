@@ -7,7 +7,10 @@ const SK_HEX = process.env.NOSTR_SK_HEX!;
 if (!SK_HEX) throw new Error("Set NOSTR_SK_HEX");
 const sk = Uint8Array.from(Buffer.from(SK_HEX, "hex"));
 const driverPubkey = getPublicKey(sk);
-const bids = new Map<string, { request_id: string; event_id: string }>();
+const bids = new Map<
+  string,
+  { request_id: string; event_id: string; rider_pubkey: string }
+>();
 const acceptedBids = new Set<string>();
 
 function computeBidSats(params: {
@@ -80,7 +83,11 @@ async function main() {
           if (!verifyEvent(bidEvent)) throw new Error("Bad bid event");
 
           await relay.publish(bidEvent);
-          bids.set(bid.bid_id, { request_id: req.id, event_id: bidEvent.id });
+          bids.set(bid.bid_id, {
+            request_id: req.id,
+            event_id: bidEvent.id,
+            rider_pubkey: ev.pubkey
+          });
           console.log("✅ Sent bid:", bid);
         } catch (err) {
           console.log("⚠️ Couldn’t parse request:", String(err));
@@ -106,11 +113,38 @@ async function main() {
     [{ kinds: [30078], "#d": ["ride_accept"] }],
     {
       onevent: async (ev) => {
-        const accept = JSON.parse(ev.content);
+        if (!verifyEvent(ev)) {
+          console.log("🚫 Invalid ride_accept signature:", ev.id);
+          return;
+        }
+
+        let accept: {
+          bid_id: string;
+          driver_pubkey: string;
+          rider_pubkey?: string;
+        };
+
+        try {
+          accept = JSON.parse(ev.content);
+        } catch (err) {
+          console.log("🚫 Invalid ride_accept payload:", String(err));
+          return;
+        }
+
         const bidRecord = bids.get(accept.bid_id);
 
         if (!bidRecord) {
           console.log("🚫 Acceptance for unknown bid:", accept.bid_id);
+          return;
+        }
+
+        if (accept.rider_pubkey && accept.rider_pubkey !== bidRecord.rider_pubkey) {
+          console.log("🚫 Acceptance rider mismatch:", accept.rider_pubkey);
+          return;
+        }
+
+        if (ev.pubkey !== bidRecord.rider_pubkey) {
+          console.log("🚫 Acceptance not signed by rider:", ev.pubkey);
           return;
         }
 
