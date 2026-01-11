@@ -9,7 +9,9 @@
     "driver": "tsx src/driver.ts",
     "bids": "tsx src/bid_listener.ts",
     "invoice": "tsx src/request_invoice.ts",
-    "rider": "tsx src/rider.ts"
+    "rider": "tsx src/rider.ts",
+    "test": "tsx tests/validation.test.ts",
+    "harness": "tsx src/dev_harness.ts"
   },
   "keywords": [],
   "author": "",
