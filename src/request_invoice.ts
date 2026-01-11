@@ -7,6 +7,12 @@ const SK_HEX = process.env.NOSTR_SK_HEX!;
 if (!SK_HEX) throw new Error("Set NOSTR_SK_HEX");
 const sk = Buffer.from(SK_HEX.trim(), "hex");
 
+const BID_EVENT_ID = process.env.BID_EVENT_ID!;
+if (!BID_EVENT_ID) throw new Error("Set BID_EVENT_ID");
+
+const DRIVER_PUBKEY = process.env.DRIVER_PUBKEY!;
+if (!DRIVER_PUBKEY) throw new Error("Set DRIVER_PUBKEY");
+
 const invoiceRequest = {
   request_id: process.env.REQUEST_ID!,
   bid_id: process.env.BID_ID!,
@@ -20,7 +26,9 @@ const event = finalizeEvent(
     created_at: Math.floor(Date.now() / 1000),
     tags: [
       ["d", "invoice_request"],
-      ["v", "1"]
+      ["v", "1"],
+      ["e", BID_EVENT_ID],
+      ["p", DRIVER_PUBKEY]
     ],
     content: JSON.stringify(invoiceRequest)
   },
