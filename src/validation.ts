@@ -104,16 +104,24 @@ export function isInvoiceResponsePayload(value: unknown): value is {
   bid_id: string;
   amount_sats: number;
   payment_mode: "LN" | "ONCHAIN";
-  invoice: string;
+  invoice?: string;
+  onchain_address?: string;
 } {
-  return (
-    isRecord(value) &&
-    isNonEmptyString(value.request_id) &&
-    isNonEmptyString(value.bid_id) &&
-    isPositiveNumber(value.amount_sats) &&
-    isPaymentMode(value.payment_mode) &&
-    isNonEmptyString(value.invoice)
-  );
+  if (
+    !isRecord(value) ||
+    !isNonEmptyString(value.request_id) ||
+    !isNonEmptyString(value.bid_id) ||
+    !isPositiveNumber(value.amount_sats) ||
+    !isPaymentMode(value.payment_mode)
+  ) {
+    return false;
+  }
+
+  if (value.payment_mode === "LN") {
+    return isNonEmptyString(value.invoice);
+  }
+
+  return isNonEmptyString(value.onchain_address);
 }
 
 export function isRideBidPayload(value: unknown): value is {

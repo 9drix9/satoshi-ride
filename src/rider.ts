@@ -213,7 +213,11 @@ async function main() {
             console.log("⚠️ Invalid invoice response payload:", invoice);
             return;
           }
-          console.log("🧾 Invoice received:", invoice);
+          if (invoice.payment_mode === "ONCHAIN") {
+            console.log("🧾 On-chain address received:", invoice.onchain_address);
+            return;
+          }
+          console.log("🧾 Invoice received:", invoice.invoice);
         } catch {
           console.log("⚠️ Bad invoice event");
         }

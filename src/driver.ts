@@ -35,6 +35,10 @@ function generateTestInvoice(params: {
   )}`;
 }
 
+function generateTestOnchainAddress(params: { request_id: string; bid_id: string }) {
+  return `bc1q${params.request_id.slice(0, 6)}${params.bid_id.slice(0, 6)}`.toLowerCase();
+}
+
 function computeBidSats(params: {
   miles: number;
   minutes: number;
@@ -187,18 +191,29 @@ async function main() {
 
           console.log("⚡ Invoice requested:", req);
 
-          const invoice = generateTestInvoice({
-            amount_sats: req.amount_sats,
-            request_id: req.request_id,
-            bid_id: req.bid_id
-          });
+          const invoice =
+            req.payment_mode === "LN"
+              ? generateTestInvoice({
+                  amount_sats: req.amount_sats,
+                  request_id: req.request_id,
+                  bid_id: req.bid_id
+                })
+              : undefined;
+          const onchain_address =
+            req.payment_mode === "ONCHAIN"
+              ? generateTestOnchainAddress({
+                  request_id: req.request_id,
+                  bid_id: req.bid_id
+                })
+              : undefined;
 
           const invoiceResponse = {
             request_id: req.request_id,
             bid_id: req.bid_id,
             amount_sats: req.amount_sats,
             payment_mode: req.payment_mode,
-            invoice
+            invoice,
+            onchain_address
           };
 
           const invoiceTemplate = {
