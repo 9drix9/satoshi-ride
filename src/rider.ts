@@ -9,10 +9,19 @@ import {
   isRideBidPayload,
   isRideStatusPayload
 } from "./validation";
+import { sendOnchainPayment, waitForConfirmations } from "./bitcoin_rpc";
 
 const RELAYS = ["wss://relay.damus.io", "wss://relay.primal.net", "wss://nos.lol"];
 const PRIMARY_RELAY = RELAYS[0];
 const BID_COLLECTION_MS = Number(process.env.BID_COLLECTION_MS ?? 10_000);
+const ONCHAIN_AUTOPAY = process.env.BTC_ONCHAIN_AUTOPAY === "true";
+const ONCHAIN_MIN_CONFIRMATIONS = Number(process.env.BTC_MIN_CONFIRMATIONS ?? 1);
+const ONCHAIN_CONFIRM_TIMEOUT_MS = Number(
+  process.env.BTC_CONFIRMATION_TIMEOUT_MS ?? 30 * 60 * 1000
+);
+const ONCHAIN_CONFIRM_POLL_MS = Number(
+  process.env.BTC_CONFIRMATION_POLL_MS ?? 15 * 1000
+);
 
 const SK_HEX = process.env.NOSTR_SK_HEX!;
 if (!SK_HEX) throw new Error("Set NOSTR_SK_HEX");
@@ -213,7 +222,36 @@ async function main() {
             console.log("⚠️ Invalid invoice response payload:", invoice);
             return;
           }
-          console.log("🧾 Invoice received:", invoice);
+          if (invoice.payment_mode === "ONCHAIN") {
+            console.log("🧾 On-chain address received:", invoice.onchain_address);
+            if (ONCHAIN_AUTOPAY && invoice.onchain_address) {
+              try {
+                const txid = await sendOnchainPayment({
+                  address: invoice.onchain_address,
+                  amount_sats: invoice.amount_sats
+                });
+                console.log("✅ On-chain payment sent:", txid);
+                const confirmations = await waitForConfirmations({
+                  txid,
+                  minConfirmations: ONCHAIN_MIN_CONFIRMATIONS,
+                  timeoutMs: ONCHAIN_CONFIRM_TIMEOUT_MS,
+                  pollIntervalMs: ONCHAIN_CONFIRM_POLL_MS
+                });
+                console.log("✅ On-chain payment confirmed:", {
+                  txid,
+                  confirmations
+                });
+              } catch (error) {
+                console.log("❌ Failed to send on-chain payment:", String(error));
+              }
+            } else if (!ONCHAIN_AUTOPAY) {
+              console.log(
+                "ℹ️ Set BTC_ONCHAIN_AUTOPAY=true to pay via Bitcoin Core RPC."
+              );
+            }
+            return;
+          }
+          console.log("🧾 Invoice received:", invoice.invoice);
         } catch {
           console.log("⚠️ Bad invoice event");
         }

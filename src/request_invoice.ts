@@ -17,7 +17,7 @@ const invoiceRequest = {
   request_id: process.env.REQUEST_ID!,
   bid_id: process.env.BID_ID!,
   amount_sats: Number(process.env.AMOUNT_SATS),
-  payment_mode: "LN"
+  payment_mode: (process.env.PAYMENT_MODE as "LN" | "ONCHAIN") ?? "LN"
 };
 
 const event = finalizeEvent(
