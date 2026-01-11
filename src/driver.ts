@@ -10,6 +10,17 @@ const driverPubkey = getPublicKey(sk);
 const bids = new Map<string, { request_id: string; event_id: string }>();
 const acceptedBids = new Set<string>();
 
+function generateTestInvoice(params: {
+  amount_sats: number;
+  request_id: string;
+  bid_id: string;
+}) {
+  return `lnbc${params.amount_sats}n1p${params.request_id.slice(0, 8)}${params.bid_id.slice(
+    0,
+    8
+  )}`;
+}
+
 function computeBidSats(params: {
   miles: number;
   minutes: number;
@@ -90,17 +101,47 @@ async function main() {
   );
   
   relay.subscribe(
-  [{ kinds: [30078], "#d": ["invoice_request"] }],
-  {
-    onevent: async (ev) => {
-      const req = JSON.parse(ev.content);
+    [{ kinds: [30078], "#d": ["invoice_request"] }],
+    {
+      onevent: async (ev) => {
+        const req = JSON.parse(ev.content);
 
-      console.log("⚡ Invoice requested:", req);
+        console.log("⚡ Invoice requested:", req);
 
-      // NEXT: generate LN invoice here
+        const invoice = generateTestInvoice({
+          amount_sats: req.amount_sats,
+          request_id: req.request_id,
+          bid_id: req.bid_id
+        });
+
+        const invoiceResponse = {
+          request_id: req.request_id,
+          bid_id: req.bid_id,
+          amount_sats: req.amount_sats,
+          payment_mode: req.payment_mode,
+          invoice
+        };
+
+        const invoiceTemplate = {
+          kind: 30078,
+          created_at: Math.floor(Date.now() / 1000),
+          tags: [
+            ["d", "invoice_response"],
+            ["v", "1"],
+            ["e", ev.id],
+            ["p", ev.pubkey]
+          ],
+          content: JSON.stringify(invoiceResponse)
+        };
+
+        const invoiceEvent = finalizeEvent(invoiceTemplate, sk);
+        if (!verifyEvent(invoiceEvent)) throw new Error("Bad invoice event");
+
+        await relay.publish(invoiceEvent);
+        console.log("🧾 Sent invoice:", invoiceResponse);
+      }
     }
-  }
-);
+  );
 
   relay.subscribe(
     [{ kinds: [30078], "#d": ["ride_accept"] }],

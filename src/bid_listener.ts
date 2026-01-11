@@ -29,6 +29,26 @@ async function main() {
       }
     }
   );
+
+  relay.subscribe(
+    [
+      {
+        kinds: [30078],
+        "#d": ["invoice_response"],
+        "#p": [RIDER_PUBKEY]
+      }
+    ],
+    {
+      onevent: (ev) => {
+        try {
+          const invoice = JSON.parse(ev.content);
+          console.log("🧾 Invoice received:", invoice);
+        } catch {
+          console.log("⚠️ Bad invoice event");
+        }
+      }
+    }
+  );
 }
 
 main();
